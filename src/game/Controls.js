@@ -1,9 +1,12 @@
 export class Controls {
   constructor(gameState) {
     this.gameState = gameState;
+    console.log("Controls 클래스 생성됨");
   }
 
   setupEventListeners() {
+    console.log("컨트롤 이벤트 리스너 설정...");
+
     // 안전장치: controls 객체 확인 및 초기화
     if (!this.gameState.controls) {
       console.warn(
@@ -28,9 +31,14 @@ export class Controls {
     if ("ontouchstart" in window) {
       this.setupMobileControls();
     }
+
+    console.log("컨트롤 이벤트 리스너 설정 완료");
   }
 
   handleKeyDown(event) {
+    // 현재 키 상태 로깅 (디버깅용)
+    console.log(`키 눌림: ${event.key}`);
+
     switch (event.key) {
       case "ArrowUp":
       case "w":
@@ -93,6 +101,8 @@ export class Controls {
   }
 
   setupMobileControls() {
+    console.log("모바일 컨트롤 설정 중...");
+
     // 모바일 컨트롤 UI 요소 생성
     const mobileControls = document.createElement("div");
     mobileControls.id = "mobileControls";
@@ -171,6 +181,8 @@ export class Controls {
 
     mobileControls.appendChild(directionControls);
     document.body.appendChild(mobileControls);
+
+    console.log("모바일 컨트롤 설정 완료");
   }
 
   createButton(text) {
@@ -192,7 +204,7 @@ export class Controls {
     const modes = ["follow", "first-person", "top-down"];
     const currentIndex = modes.indexOf(this.gameState.camera.mode);
     this.gameState.camera.mode = modes[(currentIndex + 1) % modes.length];
-    console.log("카메라 모드:", this.gameState.camera.mode);
+    console.log("카메라 모드 변경:", this.gameState.camera.mode);
   }
 
   toggleMinimap() {
@@ -200,6 +212,9 @@ export class Controls {
     if (minimap) {
       minimap.style.display =
         minimap.style.display === "none" ? "block" : "none";
+      console.log(
+        `미니맵 ${minimap.style.display === "none" ? "숨김" : "표시"}`
+      );
     }
   }
 }

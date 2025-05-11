@@ -4,25 +4,35 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 export class Car {
   constructor(scene, gameState) {
     this.scene = scene;
-    this.gameState = gameState; // 여기서는 gameState라는 이름으로 받고 있음
+    this.gameState = gameState;
     this.car = null;
     this.headlight1 = null;
     this.headlight2 = null;
+
+    // 디버깅을 위한 로그
+    console.log("Car 클래스 생성됨");
   }
 
   async loadModel() {
     return new Promise((resolve) => {
+      console.log("차량 모델 로딩 시작...");
+
       // 간단한 자동차 모델 생성
       const carGeometry = new THREE.BoxGeometry(4, 2, 8);
       const carMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
       this.car = new THREE.Mesh(carGeometry, carMaterial);
+
+      // 초기 위치 설정 - 더 높게 설정하여 지면 위에 올려놓음
       this.car.position.set(
         this.gameState.car.position.x,
-        this.gameState.car.position.y + 1.5,
+        this.gameState.car.position.y + 2, // 바닥에서 약간 위로
         this.gameState.car.position.z
       );
+
       this.car.castShadow = true;
       this.scene.add(this.car);
+
+      console.log("차량이 씬에 추가됨:", this.car.position);
 
       // 자동차 앞부분 표시
       const carFrontGeometry = new THREE.BoxGeometry(3, 1, 1);
@@ -80,56 +90,11 @@ export class Car {
       this.headlight2.castShadow = true;
       this.car.add(this.headlight2);
 
-      resolve();
+      // 게임 상태의 차량 위치를 업데이트
+      this.gameState.car.position.y = 2;
 
-      // GLTF 모델 로드 예시 (주석 처리)
-      /*
-      const loader = new GLTFLoader();
-      loader.load(
-        'models/car.glb',
-        (gltf) => {
-          this.car = gltf.scene;
-          this.car.position.set(
-            this.gameState.car.position.x, 
-            this.gameState.car.position.y, 
-            this.gameState.car.position.z
-          );
-          this.car.scale.set(0.5, 0.5, 0.5);
-          this.car.castShadow = true;
-          this.scene.add(this.car);
-          
-          // 헤드라이트 추가
-          this.headlight1 = new THREE.SpotLight(0xFFFFFF, 2);
-          this.headlight1.position.set(1, 1, 3);
-          this.headlight1.angle = Math.PI / 6;
-          this.headlight1.penumbra = 0.1;
-          this.headlight1.decay = 2;
-          this.headlight1.distance = 30;
-          this.headlight1.castShadow = true;
-          this.car.add(this.headlight1);
-          
-          this.headlight2 = new THREE.SpotLight(0xFFFFFF, 2);
-          this.headlight2.position.set(-1, 1, 3);
-          this.headlight2.angle = Math.PI / 6;
-          this.headlight2.penumbra = 0.1;
-          this.headlight2.decay = 2;
-          this.headlight2.distance = 30;
-          this.headlight2.castShadow = true;
-          this.car.add(this.headlight2);
-          
-          resolve();
-        },
-        (xhr) => {
-          console.log((xhr.loaded / xhr.total * 100) + '% 로드됨');
-        },
-        (error) => {
-          console.error('모델 로드 중 오류 발생:', error);
-          // 로드 실패 시 기본 모델 생성
-          this.createDefaultCar();
-          resolve();
-        }
-      );
-      */
+      console.log("차량 모델 로딩 완료");
+      resolve();
     });
   }
 
@@ -230,12 +195,26 @@ export class Car {
       this.car.position.x = this.gameState.car.position.x;
       this.car.position.z = this.gameState.car.position.z;
       this.car.rotation.y = this.gameState.car.rotation;
+
+      // 디버깅 로그 (커스텀 상태 표시기를 추가하거나 콘솔 로그 활성화)
+      if (this.gameState.car.speed > 0.1 || this.gameState.car.speed < -0.1) {
+        console.log(
+          `차량 위치: (${this.car.position.x.toFixed(
+            2
+          )}, ${this.car.position.y.toFixed(2)}, ${this.car.position.z.toFixed(
+            2
+          )}), 속도: ${this.gameState.car.speed.toFixed(2)}`
+        );
+      }
     }
 
     // 속도계 업데이트
-    document.getElementById("speedometer").textContent = `속도: ${Math.abs(
-      Math.round(this.gameState.car.speed)
-    )} km/h`;
+    const speedometer = document.getElementById("speedometer");
+    if (speedometer) {
+      speedometer.textContent = `속도: ${Math.abs(
+        Math.round(this.gameState.car.speed)
+      )} km/h`;
+    }
 
     // 헤드라이트 업데이트
     this.updateHeadlights();
@@ -249,16 +228,132 @@ export class Car {
 
   // 헤드라이트 업데이트
   updateHeadlights() {
-    // 헤드라이트 업데이트 코드
+    // 헤드라이트 방향 업데이트
+    if (this.headlight1 && this.headlight2) {
+      const targetX =
+        this.car.position.x + Math.sin(this.gameState.car.rotation) * 10;
+      const targetZ =
+        this.car.position.z + Math.cos(this.gameState.car.rotation) * 10;
+
+      if (!this.headlight1.target.parent) {
+        this.scene.add(this.headlight1.target);
+      }
+      if (!this.headlight2.target.parent) {
+        this.scene.add(this.headlight2.target);
+      }
+
+      this.headlight1.target.position.set(
+        targetX,
+        this.car.position.y,
+        targetZ
+      );
+      this.headlight2.target.position.set(
+        targetX,
+        this.car.position.y,
+        targetZ
+      );
+    }
   }
 
   // 카메라 업데이트
   updateCamera() {
-    // 카메라 업데이트 코드
+    // 카메라 위치 업데이트
+    switch (this.gameState.camera.mode) {
+      case "follow":
+        // 3인칭 시점 (자동차 뒤에서 따라가는 시점)
+        this.gameState.camera.position = {
+          x:
+            this.gameState.car.position.x -
+            Math.sin(this.gameState.car.rotation) * 15,
+          y: this.gameState.car.position.y + 7,
+          z:
+            this.gameState.car.position.z -
+            Math.cos(this.gameState.car.rotation) * 15,
+        };
+        this.gameState.camera.lookAt = {
+          x: this.gameState.car.position.x,
+          y: this.gameState.car.position.y + 2,
+          z: this.gameState.car.position.z,
+        };
+        break;
+
+      case "first-person":
+        // 1인칭 시점 (운전석 시점)
+        this.gameState.camera.position = {
+          x:
+            this.gameState.car.position.x +
+            Math.sin(this.gameState.car.rotation) * 2,
+          y: this.gameState.car.position.y + 3,
+          z:
+            this.gameState.car.position.z +
+            Math.cos(this.gameState.car.rotation) * 2,
+        };
+        this.gameState.camera.lookAt = {
+          x:
+            this.gameState.car.position.x +
+            Math.sin(this.gameState.car.rotation) * 10,
+          y: this.gameState.car.position.y + 2,
+          z:
+            this.gameState.car.position.z +
+            Math.cos(this.gameState.car.rotation) * 10,
+        };
+        break;
+
+      case "top-down":
+        // 탑다운 시점 (위에서 내려다보는 시점)
+        this.gameState.camera.position = {
+          x: this.gameState.car.position.x,
+          y: this.gameState.car.position.y + 30,
+          z: this.gameState.car.position.z,
+        };
+        this.gameState.camera.lookAt = {
+          x: this.gameState.car.position.x,
+          y: this.gameState.car.position.y,
+          z: this.gameState.car.position.z,
+        };
+        break;
+    }
   }
 
   // 충돌 감지
   checkCollisions() {
-    // 충돌 감지 코드
+    // 건물 충돌 감지
+    this.gameState.buildings.forEach((building) => {
+      const distance = Math.sqrt(
+        Math.pow(this.gameState.car.position.x - building.position.x, 2) +
+          Math.pow(this.gameState.car.position.z - building.position.z, 2)
+      );
+
+      // 충돌 반경 (자동차 크기 + 건물 크기의 반)
+      const collisionRadius = 4 + building.width / 2;
+
+      if (distance < collisionRadius) {
+        // 충돌 처리 - 자동차를 건물 반대 방향으로 밀어냄
+        const pushDirection = {
+          x: this.gameState.car.position.x - building.position.x,
+          z: this.gameState.car.position.z - building.position.z,
+        };
+
+        // 방향 정규화
+        const magnitude = Math.sqrt(
+          pushDirection.x * pushDirection.x + pushDirection.z * pushDirection.z
+        );
+        if (magnitude > 0) {
+          pushDirection.x /= magnitude;
+          pushDirection.z /= magnitude;
+        }
+
+        // 자동차 위치 조정
+        this.gameState.car.position.x =
+          building.position.x + pushDirection.x * collisionRadius;
+        this.gameState.car.position.z =
+          building.position.z + pushDirection.z * collisionRadius;
+
+        // 속도 감소
+        this.gameState.car.speed *= 0.5;
+
+        console.log("건물과 충돌!");
+      }
+    });
   }
 }
