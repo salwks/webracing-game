@@ -62,6 +62,7 @@ export class Game {
     this.headlight1 = null;
     this.headlight2 = null;
     this.minimapCanvas = null;
+    this.ground = null; // 지도 바닥면 참조
     this.clock = new THREE.Clock();
     this.orbitControls = null; // 디버깅용 OrbitControls
 
@@ -77,7 +78,7 @@ export class Game {
     // 로딩 표시
     this.loadingElement = null;
     this.loadingProgress = 0;
-    this.totalLoadingSteps = 3; // 위치 정보, 맵 데이터, 차량 모델
+    this.totalLoadingSteps = 4; // 위치 정보, 맵 데이터, 차량 모델, 지도 텍스처
 
     // 로그 출력
     console.log("게임 인스턴스 생성됨");
@@ -98,6 +99,10 @@ export class Game {
     // 위치 정보 가져오기
     this.updateLoadingProgress("위치 정보 가져오는 중...");
     await this.getUserLocation();
+
+    // 맵 텍스처 생성
+    this.updateLoadingProgress("지도 텍스처 로드 중...");
+    await this.createMapGround();
 
     // 컴포넌트 초기화 순서 변경
     // Controls를 먼저 초기화
@@ -182,6 +187,164 @@ export class Game {
     this.animate();
 
     return this;
+  }
+
+  // Three.js 초기화
+  initThreeJS() {
+    console.log("Three.js 초기화 중...");
+
+    // 씬 생성
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x87ceeb); // 하늘색 배경
+
+    // 안개 추가
+    this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.002);
+
+    // 카메라 설정
+    this.camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+    this.camera.position.set(0, 10, -20); // 초기 위치 수정
+    this.camera.lookAt(0, 0, 0);
+
+    // 렌더러 설정
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(this.renderer.domElement);
+
+    // 조명 설정
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    this.scene.add(ambientLight);
+
+    this.dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    this.dirLight.position.set(100, 100, 50);
+    this.dirLight.castShadow = true;
+    this.dirLight.shadow.mapSize.width = 2048;
+    this.dirLight.shadow.mapSize.height = 2048;
+    this.dirLight.shadow.camera.near = 10;
+    this.dirLight.shadow.camera.far = 200;
+    this.dirLight.shadow.camera.left = -50;
+    this.dirLight.shadow.camera.right = 50;
+    this.dirLight.shadow.camera.top = 50;
+    this.dirLight.shadow.camera.bottom = -50;
+    this.scene.add(this.dirLight);
+
+    // 맵 텍스쳐 적용은 createMapGround 메소드에서 별도로 처리
+
+    // 창 크기 조정 이벤트
+    window.addEventListener("resize", () => {
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    console.log("Three.js 초기화 완료");
+  }
+
+  // 지도 텍스처를 사용한 바닥면 생성
+  async createMapGround() {
+    console.log("지도 텍스처 바닥면 생성 중...");
+
+    // 바닥면 크기
+    const groundSize = 2000;
+
+    // 지도 영역 계산
+    const lat = this.state.userLocation.latitude;
+    const lng = this.state.userLocation.longitude;
+
+    // 지도 확대 수준 (값이 클수록 더 확대됨)
+    const zoom = 16;
+
+    // 지도 스타일
+    const mapStyle = "mapbox/satellite-streets-v12"; // 위성 이미지와 도로 정보가 결합된 스타일
+
+    // 지도 이미지 크기
+    const mapWidth = 1024;
+    const mapHeight = 1024;
+
+    // Mapbox Static Maps API URL
+    const mapUrl = `https://api.mapbox.com/styles/v1/${mapStyle}/static/${lng},${lat},${zoom}/${mapWidth}x${mapHeight}?access_token=${this.MAPBOX_API_KEY}`;
+
+    try {
+      // 텍스처 로더
+      const textureLoader = new THREE.TextureLoader();
+
+      // 지도 텍스처 로드
+      const mapTexture = await new Promise((resolve, reject) => {
+        textureLoader.load(
+          mapUrl,
+          (texture) => resolve(texture),
+          undefined,
+          (error) => reject(error)
+        );
+      });
+
+      // 로드된 텍스처로 바닥면 생성
+      const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
+      const groundMaterial = new THREE.MeshStandardMaterial({
+        map: mapTexture,
+        roughness: 0.8,
+      });
+
+      this.ground = new THREE.Mesh(groundGeometry, groundMaterial);
+      this.ground.rotation.x = -Math.PI / 2; // 수평으로 배치
+      this.ground.position.y = 0; // 바닥 높이
+      this.ground.receiveShadow = true;
+
+      // 씬에 추가
+      this.scene.add(this.ground);
+
+      console.log("지도 텍스처 바닥면 생성 완료");
+      return this.ground;
+    } catch (error) {
+      console.error("지도 텍스처 로드 실패:", error);
+
+      // 실패 시 대체 바닥면 생성
+      return this.createFallbackGround(groundSize);
+    }
+  }
+
+  // 지도 로드 실패 시 대체 바닥면 생성
+  createFallbackGround(groundSize) {
+    console.log("대체 바닥면 생성 중...");
+
+    // 그라데이션 텍스처 생성 (초록색)
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext("2d");
+    const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gradient.addColorStop(0, "#34a853"); // 내부: 밝은 초록색
+    gradient.addColorStop(1, "#1a5e1a"); // 외부: 어두운 초록색
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 256, 256);
+
+    const groundTexture = new THREE.CanvasTexture(canvas);
+    groundTexture.wrapS = THREE.RepeatWrapping;
+    groundTexture.wrapT = THREE.RepeatWrapping;
+    groundTexture.repeat.set(groundSize / 100, groundSize / 100);
+
+    const groundMaterial = new THREE.MeshStandardMaterial({
+      map: groundTexture,
+      roughness: 0.8,
+    });
+
+    this.ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(groundSize, groundSize),
+      groundMaterial
+    );
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.receiveShadow = true;
+    this.scene.add(this.ground);
+
+    console.log("대체 바닥면 생성 완료");
+    return this.ground;
   }
 
   // 로딩 화면 초기화
@@ -393,92 +556,6 @@ export class Game {
         resolve();
       }
     });
-  }
-
-  // Three.js 초기화
-  initThreeJS() {
-    console.log("Three.js 초기화 중...");
-
-    // 씬 생성
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87ceeb); // 하늘색 배경
-
-    // 안개 추가
-    this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.002);
-
-    // 카메라 설정
-    this.camera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    this.camera.position.set(0, 10, -20); // 초기 위치 수정
-    this.camera.lookAt(0, 0, 0);
-
-    // 렌더러 설정
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(this.renderer.domElement);
-
-    // 조명 설정
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    this.scene.add(ambientLight);
-
-    this.dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    this.dirLight.position.set(100, 100, 50);
-    this.dirLight.castShadow = true;
-    this.dirLight.shadow.mapSize.width = 2048;
-    this.dirLight.shadow.mapSize.height = 2048;
-    this.dirLight.shadow.camera.near = 10;
-    this.dirLight.shadow.camera.far = 200;
-    this.dirLight.shadow.camera.left = -50;
-    this.dirLight.shadow.camera.right = 50;
-    this.dirLight.shadow.camera.top = 50;
-    this.dirLight.shadow.camera.bottom = -50;
-    this.scene.add(this.dirLight);
-
-    // 지면 생성 - 텍스처 적용
-    const groundSize = 2000;
-    const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
-
-    // 그라데이션 텍스처 생성 (초록색)
-    const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 256;
-    const context = canvas.getContext("2d");
-    const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
-    gradient.addColorStop(0, "#34a853"); // 내부: 밝은 초록색
-    gradient.addColorStop(1, "#1a5e1a"); // 외부: 어두운 초록색
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 256, 256);
-
-    const groundTexture = new THREE.CanvasTexture(canvas);
-    groundTexture.wrapS = THREE.RepeatWrapping;
-    groundTexture.wrapT = THREE.RepeatWrapping;
-    groundTexture.repeat.set(groundSize / 100, groundSize / 100);
-
-    const groundMaterial = new THREE.MeshStandardMaterial({
-      map: groundTexture,
-      roughness: 0.8,
-    });
-
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
-
-    // 창 크기 조정 이벤트
-    window.addEventListener("resize", () => {
-      this.camera.aspect = window.innerWidth / window.innerHeight;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    console.log("Three.js 초기화 완료");
   }
 
   // 애니메이션 루프
