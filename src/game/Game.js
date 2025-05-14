@@ -104,10 +104,12 @@ export class Game {
     this.updateLoadingProgress("지도 텍스처 로드 중...");
     await this.createMapGround();
 
-    // 컴포넌트 초기화 순서 변경
     // Controls를 먼저 초기화
     this.controls = new Controls(this.state);
     this.controls.setupEventListeners();
+
+    // controls 객체를 window에 노출하여 다른 컴포넌트에서 접근 가능하게 함
+    window.game = this;
 
     // 그 다음 다른 컴포넌트 초기화
     this.mapLoader = new MapLoader(this.scene, this.state, this.MAPBOX_API_KEY);
@@ -579,12 +581,37 @@ export class Game {
     // 자동차 업데이트
     this.carComponent.update(deltaTime);
 
-    // 카메라 업데이트 - 이 부분이 핵심!
-    this.updateCamera();
+    // 카메라 모드 확인 및 OrbitControls 처리
+    if (this.state.camera.mode === "free" && this.orbitControls) {
+      // 자유 모드에서는 OrbitControls 활성화
+      if (!this.orbitControls.enabled) {
+        this.orbitControls.enabled = true;
 
-    // OrbitControls가 활성화되어 있으면 카메라를 직접 업데이트하지 않음
-    if (this.state.debug && this.orbitControls && this.orbitControls.enabled) {
+        // OrbitControls 타겟 설정 - 차량 위치로
+        this.orbitControls.target.set(
+          this.state.car.position.x,
+          this.state.car.position.y,
+          this.state.car.position.z
+        );
+      }
+
+      // 자동차가 움직이면 OrbitControls 타겟도 자동차 위치로 업데이트
+      this.orbitControls.target.set(
+        this.state.car.position.x,
+        this.state.car.position.y,
+        this.state.car.position.z
+      );
+
+      // OrbitControls 업데이트
       this.orbitControls.update();
+    } else {
+      // 다른 모드에서는 OrbitControls 비활성화
+      if (this.orbitControls) {
+        this.orbitControls.enabled = false;
+      }
+
+      // 일반 카메라 업데이트
+      this.updateCamera();
     }
 
     // 게임 로직 업데이트

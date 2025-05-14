@@ -219,8 +219,14 @@ export class Car {
     // 헤드라이트 업데이트
     this.updateHeadlights();
 
-    // 카메라 업데이트
-    this.updateCamera();
+    // 카메라 업데이트 - Controls.js로 이동됨
+    if (this.gameState.controls.updateCameraPosition) {
+      // Controls 클래스에 updateCameraPosition 메서드가 있으면 호출
+      this.gameState.controls.updateCameraPosition();
+    } else {
+      // 이전 방식의 카메라 업데이트 유지
+      this.updateCamera();
+    }
 
     // 충돌 감지
     this.checkCollisions();
@@ -255,7 +261,7 @@ export class Car {
     }
   }
 
-  // 카메라 업데이트
+  // 카메라 업데이트 (기존 호환성 유지)
   updateCamera() {
     // 카메라 위치 업데이트
     switch (this.gameState.camera.mode) {
@@ -311,6 +317,10 @@ export class Car {
           y: this.gameState.car.position.y,
           z: this.gameState.car.position.z,
         };
+        break;
+
+      case "free":
+        // free 모드는 Controls.js에서 처리
         break;
     }
   }
